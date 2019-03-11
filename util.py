@@ -6,6 +6,4 @@ def softmax(X, theta):
     return ps
 
 def normalize(X):
-    for row in X:
-        row /= row.sum()
-    return X
+    return X/X.sum(axis=1).reshape(len(X),1)
