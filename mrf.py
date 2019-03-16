@@ -116,7 +116,7 @@ class MRF:
         phi = (phi + lamb/c)/(lamb + num_neighbor)
         return p*phi
 
-    def train(self, iter= 1000, lr = 0.001, threshold = 1e-8):
+    def train(self, iter= 1000, lr = 0.005, threshold = 1e-10):
         X = np.zeros((len(self.papers),14))
         y = np.zeros((len(self.papers), 7))
 
@@ -133,13 +133,13 @@ class MRF:
         prev_loss = None
         print("start training, max iter:", iter, "learning rate:", lr)
         for epoch in range(iter):
-            a = X.dot(self.theta)
+            a = X.dot(np.power(self.theta,2))
             z = a.sum(axis=1)
             yhat = util.normalize(a)
 
             loss = np.power(yhat-y,2).mean()
             for i in range(7):
-                grad =(X*(((z - a.T[i]) / np.power(z,2)).reshape(len(X),1))).T.dot((yhat-y).T[i])
+                grad = ((X*((z - a.T[i]) / np.power(z,2)).reshape(len(X),1)*self.theta.T[i])).T.dot((yhat-y).T[i])
                 self.theta.T[i] -= lr*grad
 
             #self.theta -= lr*grad
@@ -150,7 +150,8 @@ class MRF:
                 break
 
             prev_loss = loss
-
+        self.theta = np.power(self.theta,2)
+        print(self.theta.T)
 
     def test_node(self, index, verbose = True, use_classifier = False):
         '''
