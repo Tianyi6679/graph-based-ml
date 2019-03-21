@@ -160,9 +160,9 @@ class MRF:
         else:
             n = self.neighbors(index, edge)
             for i in n:
-                #n_label = self.class_names.index(self.train_papers[i][3])
+                n_label = self.class_names.index(self.train_papers[i][3])
                 #phi += (self.theta[n_label * 2 + 1][label] + self.theta[n_label * 2][label]) / 2
-                phi += 1 if papers[i][3] == cls else 0
+                phi += (self.theta[n_label*2+1][label]+self.theta[n_label*2][label])
 
         #phi = (phi + lamb/c)/(lamb + num_neighbor)
         return proba*np.exp(phi)
