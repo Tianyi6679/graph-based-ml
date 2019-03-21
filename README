@@ -1,4 +1,4 @@
-All files are contained in this repo:
+All files contained in this repo:
 cora.cites/cora.content ----- original dataset
 cora_trimmed.cites      ----- graph without loops and overcitation 
 cutter.py               ----- split test and train nodes
@@ -14,4 +14,4 @@ To regenerate the experiment results reported:
     DO NOT SUPPORT COMMENDLINE INPUT!!!
     uncomment lines accordingly in the mrf_gibbs.py 
 NOTE:
-The result may vary each run, but expect to see the report result within a few number of runs.
+The result may vary each run, but expect to see the reported results within a few number of runs.
