@@ -26,7 +26,8 @@ class MRF:
         self.load_data(use_cutter = use_cutter)
         #potential function
         self.theta = np.random.uniform(size=(self.num_class*2,self.num_class))
-
+        #activation function
+        self.activation = None
     def load_data(self, use_cutter = False):
         '''
         This method load the data into predefined data structures
@@ -145,6 +146,9 @@ class MRF:
         label = self.class_names.index(cls)
         c = self.num_class
         if asymmetric:
+            if not self.activation:
+                print('plz train the model before query')
+                return
             posn = self.pos_neighbor(index, edge)
             negn = self.neg_neighbor(index, edge)
             for i in posn:
@@ -157,17 +161,20 @@ class MRF:
                 phi += self.theta[n_label*2+1][label]
                 # comment above and uncomment below to not use learned weights
                 # phi += 0.75 if papers[i][3] == cls else 0
+            if self.activation == 'softmax':
+                phi = np.exp(phi)
         else:
             n = self.neighbors(index, edge)
             for i in n:
-                #n_label = self.class_names.index(self.train_papers[i][3])
-                #phi += (self.theta[n_label * 2 + 1][label] + self.theta[n_label * 2][label]) / 2
-                phi += 1 if papers[i][3] == cls else 0
-
+                n_label = self.class_names.index(self.train_papers[i][3])
+                phi += (self.theta[n_label * 2 + 1][label] + self.theta[n_label * 2][label]) / 2
+                #phi += 1 if papers[i][3] == cls else 0
+            if self.activation == 'softmax':
+                phi = np.exp(phi)
         phi = (phi + lamb/c)/(lamb + num_neighbor)
         return proba*phi
 
-    def train(self, iter= 1000, lr = 0.01, threshold = 1e-8):
+    def train(self, iter= 2000, lr = 0.005, threshold = 1e-10, activation = 'square'):
         '''
         learn theta
         '''
@@ -194,7 +201,6 @@ class MRF:
         y = np.zeros((len(train_papers_list), 7))
 
         report_interval = iter/10
-
         for node in train_papers_list:
             ti, _, _, cls = node
             posn = self.pos_neighbor(ti2ci[ti], self.train_edge)
@@ -206,35 +212,56 @@ class MRF:
             y[ti][self.class_names.index(cls)] = 1
 
             if np.sum(X[ti]) == 0:
-                print('isolated node, index:', ti )
+                #print('isolated node, index:', ti )
                 X[ti][self.class_names.index(cls)*2] = 1
                 X[ti][self.class_names.index(cls)*2+1] = 1
 
         import util
         prev_loss = None
         print("start training, max iter:", iter, "learning rate:", lr)
-        for epoch in range(iter):
-            a = X.dot(self.theta)
-            z = a.sum(axis=1)
-            yhat = util.normalize(a)
+        if activation == 'square':
+            self.activation = activation
+            for epoch in range(iter):
+                a = X.dot(np.power(self.theta,2))
+                z = a.sum(axis=1)
+                yhat = util.normalize(a)
 
-            loss = np.power(yhat-y,2).mean()
-            for i in range(7):
-                #grad =(X*(((z - a.T[i]) / np.power(z,2)).reshape(len(X),1))).T.dot((yhat-y).T[i])
-                grad = ((X * ((z - a.T[i]) / np.power(z, 2)).reshape(len(X), 1) * self.theta.T[i])).T.dot(
-                    (yhat - y).T[i])
-                self.theta.T[i] -= lr*grad
+                loss = np.power(yhat-y,2).mean()
+                for i in range(7):
+                    #grad =(X*(((z - a.T[i]) / np.power(z,2)).reshape(len(X),1))).T.dot((yhat-y).T[i])
+                    grad = ((X * self.theta.T[i])*((z - a.T[i]) / np.power(z, 2)).reshape(len(X), 1) ).T.dot(
+                        (yhat - y).T[i])
+                    self.theta.T[i] -= lr * grad
+                #self.theta -= lr*grad
+                if epoch % report_interval == report_interval - 1:
+                    print("iter:",epoch+1,"loss:",loss)
+                if prev_loss and (prev_loss-loss) <= threshold:
+                    print("converge at iter", epoch, "loss:", loss)
+                    break
+                prev_loss = loss
+            self.theta = np.power(self.theta, 2)
+            return
+        elif activation =='softmax':
+            self.activation = activation
+            for epoch in range(iter):
+                z, a = util.softmax(X.dot(self.theta))
+                loss = np.power(a - y, 2).mean()
+                for i in range(7):
+                    yhat = a.T[i]
+                    grad = X.T.dot((yhat - y.T[i]) * (yhat - np.power(yhat, 2)))
+                    self.theta.T[i] -= lr * grad
 
-            #self.theta -= lr*grad
-            if epoch % report_interval == report_interval - 1:
-                print("iter:",epoch+1,"loss:",loss)
-            if prev_loss and (prev_loss-loss) <= threshold:
-                print("converge at iter", epoch, "loss:", loss)
-                break
+                if epoch % 100 == 0:
+                    print("iter:", epoch, "loss:", loss)
+                if prev_loss and (prev_loss - loss) <= threshold:
+                    print("converge at iter", epoch, "loss:", loss)
+                    break
 
-            prev_loss = loss
-        self.theta = np.power(self.theta, 2)
-
+                prev_loss = loss
+            #print(self.theta.T)
+        else:
+            print("only support softmax and square")
+            return
     def evaluate(self, max_iter = 100, method = 'gibbs', asymmetric = True, verbose = False, use_classifier = True):
         '''
         predict the labels for test set and evaluate result
@@ -505,8 +532,14 @@ if __name__ == "__main__":
     '''
     Just test all nodes, see if any potential function is better
     '''
+    import sys
+    if (len(sys.argv)< 3):
+        print('Usage:',sys.argv[0],'square/softmax','1/0')
+        exit(1)
+    func = sys.argv[1]
+    asym = True if sys.argv[2] == '1' else False
     mrf = MRF(cite_file = 'cora.cites', word_file = 'cora.content', use_cutter = True)
     mrf.analyze_data()
-    mrf.train()
+    mrf.train(activation=func)
     mrf.test_all()
-    mrf.evaluate(asymmetric = True)
+    mrf.evaluate(asymmetric = asym)
